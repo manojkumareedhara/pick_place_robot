@@ -1,24 +1,5 @@
 #!/usr/bin/env python3
-"""
-PANDA SIDE-GRASP PICK & PLACE (FULL) - for cuboid/box using your CubeDetector topics.
 
-Requires topics (from your detector):
-  /detected_object_position     geometry_msgs/PointStamped   (centroid) in panda_link0
-  /detected_object_dimensions   geometry_msgs/PointStamped   (width, depth, height) in panda_link0
-  /detected_object_boundary     geometry_msgs/PolygonStamped (footprint poly) in panda_link0
-  /joint_states                 sensor_msgs/JointState
-
-Core robustness:
-- Perception updates ONLY in HOME
-- Lock centroid + dims + boundary for ONE attempt
-- If fail: backoff -> HOME -> reacquire fresh detections
-- Side grasp:
-    * Compute box yaw via PCA on boundary points
-    * Pick a side normal and approach from outside in XY
-    * Close at mid-height (centroid.z)
-    * Verify grasp by finger closure
-    * Lift and place
-"""
 
 import math
 import time
@@ -47,9 +28,7 @@ class RobotState(Enum):
 
 
 def quaternion_from_euler(roll: float, pitch: float, yaw: float):
-    """
-    Convert roll/pitch/yaw to quaternion (x,y,z,w).
-    """
+
     cr = math.cos(roll * 0.5)
     sr = math.sin(roll * 0.5)
     cp = math.cos(pitch * 0.5)
@@ -65,19 +44,13 @@ def quaternion_from_euler(roll: float, pitch: float, yaw: float):
 
 
 class PandaSidePickPlace(Node):
-    # ---------- perception stability ----------
     STABLE_FRAMES_REQUIRED = 6
-    POS_STD_THRESH = 0.003  # m
+    POS_STD_THRESH = 0.003  
 
-    # ---------- grasp geometry ----------
-    # How far outside the object we start (approach point)
-    APPROACH_DIST = 0.14     # m (horizontal approach)
-    # How far inside from the face we stop before closing (small)
-    FINAL_INSET = 0.008      # m
-    # Height of side grasp = centroid.z (you can offset)
+    APPROACH_DIST = 0.14    
+    FINAL_INSET = 0.008     
     GRASP_Z_OFFSET = 0.0
 
-    # ---------- motion ----------
     VEL_FAST = 0.15
     ACC_FAST = 0.15
     VEL_SLOW = 0.05
@@ -86,35 +59,23 @@ class PandaSidePickPlace(Node):
     ACC_LIFT_VERIFY = 0.03
     MIN_ABSOLUTE_Z = 0.05
 
-    # Lift heights
     LIFT_VERIFY_DZ = 0.06
     LIFT_DZ = 0.15
 
-    # Close dwell
     CLOSE_DWELL_SEC = 0.30
 
-    # ---------- grasp success ----------
     EMPTY_GRASP_THRESHOLD = 0.004
 
-    # ---------- retries ----------
     MAX_ATTEMPTS_PER_OBJECT = 6
     BACKOFF_Z = 0.10
     REACQUIRE_COOLDOWN_SEC = 0.25
 
-    # ---------- place target ----------
     PLACE_X = 0.55
     PLACE_Y = -0.15
     PLACE_Z = 0.20
     PLACE_APPROACH_Z = 0.18
     PLACE_DESCENT_STEPS = 8
 
-    # ---------- side grasp EE orientation ----------
-    # This is the BIG tuning knob if side grasp “misses”.
-    # These Euler angles define the gripper’s baseline orientation; yaw is added based on box yaw.
-    #
-    # Common Panda setups:
-    #   - roll=pi, pitch=+pi/2 often makes gripper approach sideways with fingers vertical-ish.
-    # If it approaches with the wrong face, try pitch=-pi/2 or roll=0.
     SIDE_GRASP_ROLL = math.pi
     SIDE_GRASP_PITCH = math.pi / 2
 
@@ -124,21 +85,17 @@ class PandaSidePickPlace(Node):
         self.cb_group = ReentrantCallbackGroup()
         self.state = RobotState.HOME
 
-        # --- live perception buffers (HOME only) ---
         self.centroid_buf = deque(maxlen=self.STABLE_FRAMES_REQUIRED)
         self.dims_buf = deque(maxlen=self.STABLE_FRAMES_REQUIRED)
         self.boundary_msg = None
 
-        # --- locked perception (one attempt) ---
-        self.locked_centroid = None  # PointStamped
-        self.locked_dims = None      # PointStamped (width, depth, height)
-        self.locked_boundary = None  # PolygonStamped
+        self.locked_centroid = None  
+        self.locked_dims = None     
+        self.locked_boundary = None  
 
-        # attempt tracking
         self.attempts = 0
         self.reacquire_until_time = 0.0
 
-        # finger joints feedback
         self.finger = {"panda_finger_joint1": None, "panda_finger_joint2": None}
 
         # MoveIt2
@@ -163,13 +120,11 @@ class PandaSidePickPlace(Node):
             gripper_command_action_name="gripper_action_controller/gripper_cmd",
         )
 
-        # Subscribers (your detector topics)
         self.create_subscription(PointStamped, "/detected_object_position", self.centroid_cb, 10)
         self.create_subscription(PointStamped, "/detected_object_dimensions", self.dims_cb, 10)
         self.create_subscription(PolygonStamped, "/detected_object_boundary", self.boundary_cb, 10)
         self.create_subscription(JointState, "/joint_states", self.joint_cb, 50)
 
-        # Home joints
         self.home_joints = [
             0.0,
             math.radians(-45.0),
@@ -185,7 +140,6 @@ class PandaSidePickPlace(Node):
 
         self.create_timer(0.1, self.step, callback_group=self.cb_group)
 
-    # ---------------- callbacks ----------------
     def centroid_cb(self, msg: PointStamped):
         if self.state != RobotState.HOME:
             return
@@ -198,7 +152,6 @@ class PandaSidePickPlace(Node):
             return
         if time.time() < self.reacquire_until_time:
             return
-        # width=x, depth=y, height=z
         self.dims_buf.append((msg.point.x, msg.point.y, msg.point.z, msg.header.stamp))
 
     def boundary_cb(self, msg: PolygonStamped):
@@ -215,7 +168,6 @@ class PandaSidePickPlace(Node):
             if j in idx:
                 self.finger[j] = msg.position[idx[j]]
 
-    # ---------------- basic motion ----------------
     def go_home(self):
         self.moveit2.max_velocity = self.VEL_FAST
         self.moveit2.max_acceleration = self.ACC_FAST
@@ -253,7 +205,6 @@ class PandaSidePickPlace(Node):
             return
         self.move_pose(ee.x, ee.y, ee.z + self.BACKOFF_Z, quat_xyzw=[0.0, 0.0, 0.0, 1.0], fast=True)
 
-    # ---------------- perception lock ----------------
     def stable(self) -> bool:
         if len(self.centroid_buf) < self.STABLE_FRAMES_REQUIRED:
             return False
@@ -265,11 +216,9 @@ class PandaSidePickPlace(Node):
         c = np.array([[x, y, z] for (x, y, z, _) in self.centroid_buf], dtype=np.float32)
         d = np.array([[x, y, z] for (x, y, z, _) in self.dims_buf], dtype=np.float32)
 
-        # centroid stability
         if np.max(np.std(c, axis=0)) > self.POS_STD_THRESH:
             return False
 
-        # dims stability (looser)
         if np.max(np.std(d, axis=0)) > 0.01:
             return False
 
@@ -287,9 +236,9 @@ class PandaSidePickPlace(Node):
 
         self.locked_dims = PointStamped()
         self.locked_dims.header.frame_id = self.boundary_msg.header.frame_id
-        self.locked_dims.point.x = float(d[0])  # width
-        self.locked_dims.point.y = float(d[1])  # depth
-        self.locked_dims.point.z = float(d[2])  # height
+        self.locked_dims.point.x = float(d[0]) 
+        self.locked_dims.point.y = float(d[1]) 
+        self.locked_dims.point.z = float(d[2]) 
 
         self.locked_boundary = self.boundary_msg
 
@@ -314,7 +263,6 @@ class PandaSidePickPlace(Node):
         self.dims_buf.clear()
         self.boundary_msg = None
 
-    # ---------------- box yaw from boundary (PCA) ----------------
     def compute_box_yaw(self):
         b = self.locked_boundary
         if b is None or not b.polygon.points or len(b.polygon.points) < 3:
@@ -331,11 +279,9 @@ class PandaSidePickPlace(Node):
         return yaw
 
     def side_grasp_quat(self, yaw):
-        # yaw is box yaw; we align gripper yaw with box yaw (or +/- 90 depending on your setup)
-        # Here we use yaw directly; if fingers are “wrong direction”, try yaw + pi/2.
+
         return quaternion_from_euler(self.SIDE_GRASP_ROLL, self.SIDE_GRASP_PITCH, yaw)
 
-    # ---------------- grasp checks ----------------
     def grasp_succeeded(self) -> bool:
         j1 = self.finger["panda_finger_joint1"]
         j2 = self.finger["panda_finger_joint2"]
@@ -346,17 +292,14 @@ class PandaSidePickPlace(Node):
         self.get_logger().info(f"Finger avg: {avg:.4f}")
         return avg > self.EMPTY_GRASP_THRESHOLD
 
-    # ---------------- side grasp plan ----------------
     def attempt_side_grasp_once(self) -> bool:
-        """
-        Try side grasp from BOTH sides of the box.
-        """
+        
         if self.locked_centroid is None or self.locked_dims is None or self.locked_boundary is None:
             return False
 
         yaw = self.compute_box_yaw()
         if yaw is None:
-            self.get_logger().warn("No yaw from boundary -> cannot side grasp")
+            self.get_logger().warn("No yaw from boundary, cannot side grasp")
             return False
 
         quat = self.side_grasp_quat(yaw)
@@ -364,23 +307,19 @@ class PandaSidePickPlace(Node):
         cen = self.locked_centroid.point
         dims = self.locked_dims.point
 
-        # choose half of the smaller footprint dimension as approach offset
         half_short = 0.5 * min(float(dims.x), float(dims.y))
         side_offset = max(0.0, half_short - self.FINAL_INSET)
 
-        # normal direction for “a face” (use box yaw)
         nx = math.cos(yaw)
         ny = math.sin(yaw)
 
         grasp_z = float(cen.z) + self.GRASP_Z_OFFSET
         grasp_z = max(grasp_z, self.MIN_ABSOLUTE_Z)
 
-        # Try both faces (+normal and -normal)
         for sign in (+1.0, -1.0):
             tx = float(cen.x) + sign * side_offset * nx
             ty = float(cen.y) + sign * side_offset * ny
 
-            # Approach point is further out along same normal
             ax = tx + sign * self.APPROACH_DIST * nx
             ay = ty + sign * self.APPROACH_DIST * ny
 
@@ -389,28 +328,22 @@ class PandaSidePickPlace(Node):
                 f"approach=({ax:.3f},{ay:.3f},{grasp_z:.3f}) target=({tx:.3f},{ty:.3f},{grasp_z:.3f})"
             )
 
-            # Execute:
             self.state = RobotState.PICKING
             self.open_gripper()
             time.sleep(0.05)
 
-            # 1) go to approach point (fast)
             self.move_pose(ax, ay, grasp_z, quat, fast=True)
 
-            # 2) slide in (slow)
             self.move_pose(tx, ty, grasp_z, quat, fast=False)
 
-            # 3) close and dwell
             self.close_gripper()
             time.sleep(self.CLOSE_DWELL_SEC)
 
             if not self.grasp_succeeded():
                 self.get_logger().warn("Empty grasp -> backoff and try other side")
-                # back off outward a bit (reverse the approach)
                 self.move_pose(ax, ay, grasp_z, quat, fast=True)
                 continue
 
-            # 4) lift verify slowly
             self.moveit2.max_velocity = self.VEL_LIFT_VERIFY
             self.moveit2.max_acceleration = self.ACC_LIFT_VERIFY
             self.moveit2.move_to_pose(
@@ -424,27 +357,23 @@ class PandaSidePickPlace(Node):
                 self.move_pose(ax, ay, grasp_z + self.LIFT_VERIFY_DZ, quat, fast=True)
                 continue
 
-            # 5) full lift
             self.move_pose(tx, ty, grasp_z + self.LIFT_DZ, quat, fast=True)
             return True
 
         return False
 
-    # ---------------- place routine ----------------
+    
     def place(self):
         self.state = RobotState.PLACING
 
         px, py, pz = self.PLACE_X, self.PLACE_Y, self.PLACE_Z
         above_z = pz + self.PLACE_APPROACH_Z
 
-        # keep same quat as last (doesn’t matter much for place)
-        # Use a neutral yaw to avoid weird wrist flips
+
         quat = quaternion_from_euler(self.SIDE_GRASP_ROLL, self.SIDE_GRASP_PITCH, 0.0)
 
-        # go above place
         self.move_pose(px, py, above_z, quat, fast=True)
 
-        # descend in steps
         self.moveit2.max_velocity = self.VEL_SLOW
         self.moveit2.max_acceleration = self.ACC_SLOW
         for i in range(self.PLACE_DESCENT_STEPS):
@@ -457,21 +386,15 @@ class PandaSidePickPlace(Node):
         self.open_gripper()
         time.sleep(0.10)
 
-        # retreat
         self.move_pose(px, py, above_z, quat, fast=True)
 
-    # ---------------- reacquire ----------------
     def reacquire(self, reason: str):
         self.get_logger().warn(f"Reacquire: {reason}")
-        # backoff up
         self.backoff_vertical()
-        # clear everything & go home
         self.clear_lock_and_buffers()
         self.go_home()
-        # small delay so buffers refill with new data
         self.reacquire_until_time = time.time() + self.REACQUIRE_COOLDOWN_SEC
 
-    # ---------------- main step ----------------
     def step(self):
         if self.state != RobotState.HOME:
             return
@@ -489,7 +412,6 @@ class PandaSidePickPlace(Node):
         if not self.stable():
             return
 
-        # lock for ONE attempt
         self.lock()
 
         ok = self.attempt_side_grasp_once()
@@ -497,7 +419,6 @@ class PandaSidePickPlace(Node):
             self.reacquire("side grasp failed")
             return
 
-        # place and reset
         self.place()
         self.get_logger().info("Pick-and-place SUCCESS. Returning HOME.")
         self.attempts = 0

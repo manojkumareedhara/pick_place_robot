@@ -1,21 +1,4 @@
 #!/usr/bin/env python3
-"""
-Robust RGB-D Cube Detector for Gazebo Simulation
-
-Optimized for detecting and tracking colored cubes on a table.
-
-Publishes:
-- /detected_object_position    (PointStamped): centroid in panda_link0
-- /detected_object_top         (PointStamped): top surface grasp point
-- /detected_object_height      (Float32): cube height
-- /detected_object_dimensions  (PointStamped): width, depth, height
-- /detected_object_boundary    (PolygonStamped): 3D footprint boundary
-- /debug_image                 (Image): visualization
-
-Run:
-  ros2 run panda_object_detection cube_detector.py
-"""
-
 import rclpy
 from rclpy.node import Node
 
@@ -41,17 +24,14 @@ class CubeDetector(Node):
 
         self.bridge = CvBridge()
 
-        # ===================== PARAMETERS =====================
-        # Camera intrinsics
+
         self.fx = self.fy = self.cx = self.cy = None
         self.camera_info_received = False
         
-        # Depth filtering
         self.declare_parameter("min_depth", 0.20)
         self.declare_parameter("max_depth", 1.50)
         self.declare_parameter("min_area", 400)
         
-        # Color detection (RED by default for common test cubes)
         self.declare_parameter("lower_hue1", 0)
         self.declare_parameter("upper_hue1", 10)
         self.declare_parameter("lower_hue2", 170)
@@ -59,27 +39,23 @@ class CubeDetector(Node):
         self.declare_parameter("min_saturation", 100)
         self.declare_parameter("min_value", 50)
         
-        # Depth percentiles for robust measurement
-        self.declare_parameter("top_percentile", 10.0)     # top surface
-        self.declare_parameter("bottom_percentile", 90.0)  # bottom surface
+        self.declare_parameter("top_percentile", 10.0)    
+        self.declare_parameter("bottom_percentile", 90.0)  
         
-        # Morphology
+
         self.declare_parameter("morph_kernel", 5)
         
-        # Frames
+
         self.declare_parameter("camera_frame", "camera_link_optical")
         self.declare_parameter("base_frame", "panda_link0")
         
-        # ===================== TF SETUP =====================
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
         
-        # ===================== TEMPORAL SMOOTHING =====================
         self.centroid_buffer = deque(maxlen=5)
         self.top_buffer = deque(maxlen=5)
         
-        # ===================== SUBSCRIBERS =====================
-        # Synchronized RGB and Depth
+
         self.rgb_sub = message_filters.Subscriber(
             self, Image, "/camera/image_raw"
         )
@@ -93,8 +69,7 @@ class CubeDetector(Node):
             slop=0.1,
         )
         self.ts.registerCallback(self.rgbd_callback)
-        
-        # Camera info
+
         self.create_subscription(
             CameraInfo,
             "/camera/depth/camera_info",
@@ -102,7 +77,6 @@ class CubeDetector(Node):
             10,
         )
         
-        # ===================== PUBLISHERS =====================
         self.centroid_pub = self.create_publisher(
             PointStamped, "/detected_object_position", 10
         )
@@ -124,9 +98,7 @@ class CubeDetector(Node):
         
         self.get_logger().info("Cube detector initialized. Waiting for camera info...")
 
-    # ===================== CAMERA INFO =====================
     def camera_info_callback(self, msg: CameraInfo):
-        """Store camera intrinsics."""
         if self.camera_info_received:
             return
         
@@ -142,13 +114,10 @@ class CubeDetector(Node):
             f"cx={self.cx:.1f}, cy={self.cy:.1f}"
         )
 
-    # ===================== MAIN CALLBACK =====================
     def rgbd_callback(self, rgb_msg: Image, depth_msg: Image):
-        """Process synchronized RGB-D images."""
         if not self.camera_info_received:
             return
 
-        # Convert images
         try:
             rgb = self.bridge.imgmsg_to_cv2(rgb_msg, desired_encoding="bgr8")
             depth = self.bridge.imgmsg_to_cv2(depth_msg, desired_encoding="passthrough")
@@ -156,10 +125,8 @@ class CubeDetector(Node):
             self.get_logger().error(f"Image conversion failed: {e}")
             return
 
-        # Sanitize depth
         depth = np.nan_to_num(depth, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
         
-        # Convert mm to m if needed
         if depth[depth > 0].size > 0 and np.max(depth[depth > 0]) > 10.0:
             depth *= 0.001
 
@@ -169,7 +136,6 @@ class CubeDetector(Node):
             self.publish_debug_image(rgb, None, None, None)
             return
 
-        # Find contours
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
             self.publish_debug_image(rgb, None, None, None)
@@ -182,21 +148,13 @@ class CubeDetector(Node):
             self.publish_debug_image(rgb, None, None, None)
             return
 
-        # Get largest contour (closest/biggest cube)
         contour = max(valid_contours, key=cv2.contourArea)
         hull = cv2.convexHull(contour)
 
-        # Process detection
         self.process_cube(hull, depth, rgb, rgb_msg.header)
 
-    # ===================== COLOR DETECTION =====================
     def detect_colored_object(self, rgb, depth):
-        """
-        Detect colored object using HSV color space and depth filtering.
-        
-        Returns:
-            Binary mask of detected object, or None if nothing found
-        """
+
         min_depth = float(self.get_parameter("min_depth").value)
         max_depth = float(self.get_parameter("max_depth").value)
 
@@ -236,17 +194,8 @@ class CubeDetector(Node):
 
         return combined
 
-    # ===================== CUBE PROCESSING =====================
     def process_cube(self, hull, depth, rgb, header):
-        """
-        Process detected cube and publish all information.
-        
-        Args:
-            hull: Convex hull of detected contour
-            depth: Depth image
-            rgb: RGB image
-            header: Image header with timestamp
-        """
+
         cam_frame = self.get_parameter("camera_frame").value
         base_frame = self.get_parameter("base_frame").value
 
@@ -254,7 +203,6 @@ class CubeDetector(Node):
         mask = np.zeros(depth.shape, dtype=np.uint8)
         cv2.drawContours(mask, [hull], -1, 255, -1)
 
-        # Get depth values inside hull
         depths = depth[mask == 255]
         depths = depths[depths > 0]
 
@@ -262,7 +210,6 @@ class CubeDetector(Node):
             self.publish_debug_image(rgb, hull, None, None)
             return
 
-        # Compute robust depth statistics
         top_p = float(self.get_parameter("top_percentile").value)
         bottom_p = float(self.get_parameter("bottom_percentile").value)
 
@@ -271,7 +218,6 @@ class CubeDetector(Node):
         z_centroid = float(np.median(depths))
         height = float(max(0.0, z_bottom - z_top))
 
-        # Compute 2D centroid
         M = cv2.moments(hull)
         if abs(M["m00"]) < 1e-6:
             self.publish_debug_image(rgb, hull, None, None)
@@ -280,8 +226,7 @@ class CubeDetector(Node):
         u_c = int(M["m10"] / M["m00"])
         v_c = int(M["m01"] / M["m00"])
 
-        # Compute top grasp point (center of top surface)
-        # Use pixels near top depth
+
         top_layer = (mask == 255) & (depth > 0) & (depth <= (z_top + 0.015))
         ys, xs = np.where(top_layer)
 
@@ -291,18 +236,15 @@ class CubeDetector(Node):
         else:
             u_top, v_top = u_c, v_c
 
-        # Convert to 3D camera frame
-        # Centroid point
+
         cx_cam = float((u_c - self.cx) * z_centroid / self.fx)
         cy_cam = float((v_c - self.cy) * z_centroid / self.fy)
         cz_cam = float(z_centroid)
 
-        # Top grasp point
         tx_cam = float((u_top - self.cx) * z_top / self.fx)
         ty_cam = float((v_top - self.cy) * z_top / self.fy)
         tz_cam = float(z_top)
 
-        # Transform to base frame
         stamp_time = rclpy.time.Time.from_msg(header.stamp)
 
         try:
@@ -317,7 +259,6 @@ class CubeDetector(Node):
             self.publish_debug_image(rgb, hull, (u_c, v_c), (u_top, v_top))
             return
 
-        # Create and transform centroid point
         centroid_cam = PointStamped()
         centroid_cam.header.frame_id = cam_frame
         centroid_cam.header.stamp = header.stamp
@@ -325,7 +266,6 @@ class CubeDetector(Node):
         centroid_cam.point.y = cy_cam
         centroid_cam.point.z = cz_cam
 
-        # Create and transform top point
         top_cam = PointStamped()
         top_cam.header.frame_id = cam_frame
         top_cam.header.stamp = header.stamp
@@ -336,7 +276,7 @@ class CubeDetector(Node):
         centroid_base = do_transform_point(centroid_cam, tf)
         top_base = do_transform_point(top_cam, tf)
 
-        # Temporal smoothing
+        
         self.centroid_buffer.append((
             centroid_base.point.x,
             centroid_base.point.y,
@@ -351,7 +291,6 @@ class CubeDetector(Node):
         c_avg = np.mean(np.array(self.centroid_buffer, dtype=np.float32), axis=0)
         t_avg = np.mean(np.array(self.top_buffer, dtype=np.float32), axis=0)
 
-        # Publish smoothed centroid
         centroid_out = PointStamped()
         centroid_out.header.frame_id = base_frame
         centroid_out.header.stamp = header.stamp
@@ -359,7 +298,6 @@ class CubeDetector(Node):
         centroid_out.point.y = float(c_avg[1])
         centroid_out.point.z = float(c_avg[2])
 
-        # Publish smoothed top
         top_out = PointStamped()
         top_out.header.frame_id = base_frame
         top_out.header.stamp = header.stamp
@@ -367,7 +305,6 @@ class CubeDetector(Node):
         top_out.point.y = float(t_avg[1])
         top_out.point.z = float(t_avg[2])
 
-        # Compute dimensions
         x, y, w, h = cv2.boundingRect(hull)
         x1_3d = float((x - self.cx) * z_centroid / self.fx)
         y1_3d = float((y - self.cy) * z_centroid / self.fy)
@@ -384,25 +321,19 @@ class CubeDetector(Node):
         dims.point.y = depth_dim
         dims.point.z = height
 
-        # Publish height
         hmsg = Float32()
         hmsg.data = height
 
-        # Publish all
         self.centroid_pub.publish(centroid_out)
         self.top_pub.publish(top_out)
         self.height_pub.publish(hmsg)
         self.dimensions_pub.publish(dims)
 
-        # Publish boundary
         self.publish_boundary(hull, depth, header, tf)
 
-        # Debug visualization
         self.publish_debug_image(rgb, hull, (u_c, v_c), (u_top, v_top))
 
-    # ===================== BOUNDARY =====================
     def publish_boundary(self, hull, depth, header, tf_cam_to_base):
-        """Publish 3D boundary polygon in base frame."""
         cam_frame = self.get_parameter("camera_frame").value
         base_frame = self.get_parameter("base_frame").value
 
@@ -446,7 +377,6 @@ class CubeDetector(Node):
         if poly.polygon.points:
             self.boundary_pub.publish(poly)
 
-    # ===================== DEBUG VISUALIZATION =====================
     def publish_debug_image(self, rgb, hull, centroid_uv, top_uv):
         """Publish debug image with overlays."""
         debug = rgb.copy()
@@ -488,7 +418,7 @@ def main():
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        node.get_logger().info("Shutting down...")
+        node.get_logger().info("Shutting down")
     finally:
         node.destroy_node()
         rclpy.shutdown()
