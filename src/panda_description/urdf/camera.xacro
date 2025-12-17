@@ -1,0 +1,109 @@
+<?xml version="1.0"?>
+<robot name="panda" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <!-- ================= CAMERA MOUNT (FIXED) ================= -->
+
+    <xacro:property name="camera_x" value="0.30" />      <!-- closer -->
+    <xacro:property name="camera_y" value="0.0" />
+    <xacro:property name="camera_z" value="0.55" />      <!-- lower -->
+    <xacro:property name="camera_tilt" value="0.7" />    <!-- ~40° downward -->
+
+    <link name="camera_link">
+        <inertial>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <mass value="0.1" />
+            <inertia ixx="0.01" ixy="0.0" ixz="0.0"
+                iyy="0.01" iyz="0.0"
+                izz="0.01" />
+        </inertial>
+
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <box size="0.08 0.04 0.04" />
+            </geometry>
+            <material name="Grey" />
+        </visual>
+    </link>
+
+    <!-- Camera mount -->
+    <joint name="camera_joint" type="fixed">
+        <parent link="panda_link0" />
+        <child link="camera_link" />
+        <origin xyz="${camera_x} ${camera_y} ${camera_z}"
+            rpy="0 ${camera_tilt} 0" />
+    </joint>
+
+    <!-- Optical frame (CORRECT & STANDARD) -->
+    <link name="camera_link_optical" />
+
+    <joint name="camera_optical_joint" type="fixed">
+        <parent link="camera_link" />
+        <child link="camera_link_optical" />
+        <origin xyz="0 0 0" rpy="-1.5708 0 -1.5708" />
+    </joint>
+
+
+    <!-- RGB Camera -->
+    <gazebo reference="camera_link">
+        <sensor name="rgb_camera" type="camera">
+            <update_rate>30</update_rate>
+            <always_on>true</always_on>
+            <visualize>true</visualize>
+
+            <camera>
+                <horizontal_fov>1.0472</horizontal_fov>  <!-- 60 degrees -->
+                <image>
+                    <width>320</width>
+                    <height>240</height>
+                    <format>R8G8B8</format>
+                </image>
+                <clip>
+                    <near>0.05</near>
+                    <far>3.0</far>
+                </clip>
+            </camera>
+
+            <plugin name="rgb_camera_controller" filename="libgazebo_ros_camera.so">
+                <ros>
+                    <namespace>/camera</namespace>
+                </ros>
+                <frameName>camera_link_optical</frameName>
+                <imageTopicName>image_raw</imageTopicName>
+                <cameraInfoTopicName>camera_info</cameraInfoTopicName>
+            </plugin>
+        </sensor>
+    </gazebo>
+
+    <!-- Depth Camera -->
+    <gazebo reference="camera_link">
+        <sensor name="depth_camera" type="depth">
+            <update_rate>30</update_rate>
+            <always_on>true</always_on>
+            <visualize>true</visualize>
+
+            <camera>
+                <horizontal_fov>1.0472</horizontal_fov>  <!-- 60 degrees -->
+                <image>
+                    <width>320</width>
+                    <height>240</height>
+                </image>
+                <clip>
+                    <near>0.05</near>
+                    <far>3.0</far>
+                </clip>
+            </camera>
+
+            <plugin name="depth_camera_controller" filename="libgazebo_ros_depth_camera.so">
+                <ros>
+                    <namespace>/camera</namespace>
+                </ros>
+                <frameName>camera_link_optical</frameName>
+                <imageTopicName>depth/image_raw</imageTopicName>
+                <cameraInfoTopicName>depth/camera_info</cameraInfoTopicName>
+                <pointCloudTopicName>depth/points</pointCloudTopicName>
+            </plugin>
+        </sensor>
+    </gazebo>
+
+</robot>

@@ -1,0 +1,48 @@
+FROM manojkumareedhara2/ur10e:latest
+
+
+ENV DEBIAN_FRONTEND=noninteractive
+SHELL ["/bin/bash", "-c"]
+
+ENV WS=/ws_moveit
+WORKDIR $WS
+
+
+COPY src $WS/src
+
+RUN apt-get update && apt-get install -y \
+    python3-colcon-common-extensions \
+    python3-rosdep \
+    python3-pip \
+    git \
+    build-essential \
+    ros-humble-moveit \
+    ros-humble-moveit-common \
+    ros-humble-moveit-ros-planning-interface \
+    ros-humble-moveit-visual-tools \
+    ros-humble-xacro \
+    ros-humble-tf-transformations \
+    ros-humble-image-transport \
+    ros-humble-cv-bridge \
+    ros-humble-vision-opencv \
+    ros-humble-rviz2 \
+    && rm -rf /var/lib/apt/lists/*
+
+
+RUN rosdep init || true
+RUN rosdep update
+
+RUN source /opt/ros/humble/setup.bash && \
+    rosdep install --from-paths src --ignore-src -r -y
+
+
+RUN source /opt/ros/humble/setup.bash && \
+    colcon build --symlink-install
+
+
+RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
+    echo "source $WS/install/setup.bash" >> /root/.bashrc
+
+
+#Entry
+CMD ["bash"]
