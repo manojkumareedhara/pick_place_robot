@@ -20,7 +20,7 @@ This Lift arm is used for drawing shapes in the 3d space. This arm is mainly des
 ![Lift Arm Demo](media/lift_arm.gif)
 
 
-Docker Hub Link: [text](https://hub.docker.com/r/manojkumareedhara2/ur10e)
+Docker Hub Link: [https://hub.docker.com/r/manojkumareedhara2/ur10e](https://hub.docker.com/r/manojkumareedhara2/ur10e)
 
 ## System Setup
 
