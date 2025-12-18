@@ -10,7 +10,7 @@ A Franka Panda robot is simulated in Gazebo, plans collision-free trajectories u
 The entire system runs in Docker and is reproducible on any Linux machine.
 
 ### Repo structure
-
+```
 devrob_pick_place/
 ├─ Dockerfile
 ├─ README.md
@@ -32,3 +32,4 @@ devrob_pick_place/
 │  │     └─ table_pick_place.world
 └─ media/
    └─ demo.gif (or demo.mp4)
+```
