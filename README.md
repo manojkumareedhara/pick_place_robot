@@ -14,7 +14,9 @@ This project implements a complete pick-and-place simulation using a robotic arm
 
 
 ### Lift arm 
-This Lift arm is used for drawing shapes in the 3d space. This arm is mainly designed to use for Painting the walls and construction. 
+This Lift arm is used for drawing shapes in the 3d space. This arm is mainly designed for painting the walls and construction. 
+
+This arm uses the Trapezoidal Velocity profile for smooth operation. 
 <!-- - [Lift Arm Motion Video](media/lift_arm.mp4) -->
  
 ![Lift Arm Demo](media/lift_arm.gif)
