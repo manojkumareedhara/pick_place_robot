@@ -4,6 +4,20 @@
 
 This project implements a complete pick-and-place simulation using a robotic arm. A Franka Panda robot is simulated in Gazebo Harmonic, plans collision-free trajectories using MoveIt 2, and executes a side-grasp pick-and-place pipeline to move a cuboid object from position A to B. The entire system runs in Docker and is reproducible on any Linux machine.
 
+
+### Pick and Place Execution
+<!-- ![Pick and Place Demo](media/pick_and_place.gif) -->
+## Demonstration
+
+- [Pick and Place Simulation Video](media/Pick%20and%20place.mp4)
+
+
+### Lift arm 
+This Lift arm is used for drawing shapes in the 3d space. This arm is mainly designed to use for Painting the walls and construction. 
+- [Lift Arm Motion Video](media/lift_arm.mp4)
+
+<!-- ![Lift Arm Demo](media/lift_arm.gif) -->
+
 ## System Setup
 
 ### Robot Configuration
