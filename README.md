@@ -77,3 +77,67 @@ Use Cartesian motion for approach and lift
 This approach improves grasp stability for cuboid objects.
 
 
+Motion Planning and Execution
+8.1 MoveIt 2 Planning
+
+MoveIt 2 is used for:
+
+inverse kinematics
+
+collision checking
+
+trajectory generation
+
+8.2 Collision Management
+
+During execution:
+
+the table and object are added as collision objects
+
+the object is attached to the gripper after grasp
+
+the object is detached after placement
+
+This ensures collision-free motion throughout the task.
+
+
+Gripper Control and Grasp Validation
+
+The gripper is controlled via a simple open/close interface.
+
+After closing:
+
+if the fingers fully close, the grasp is considered failed
+
+if the fingers partially close, the object is considered successfully grasped
+
+This heuristic is sufficient and reliable in simulation.
+
+11. Running the Simulation
+11.1 Build Docker Image
+docker build -t panda_pick_place .
+
+11.2 Run Docker Container
+xhost +local:docker
+
+docker run -it --rm \
+  --net=host \
+  -e DISPLAY=$DISPLAY \
+  -e QT_X11_NO_MITSHM=1 \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  panda_pick_place
+
+
+Inside the container:
+
+source /opt/ros/humble/setup.bash
+source /ws_moveit/install/setup.bash
+
+11.3 Launch Sequence
+ros2 launch panda_description gazebo.launch.py
+ros2 launch panda_controller controllers.launch.py
+ros2 launch panda_moveit moveit.launch.py
+ros2 run panda_object_detection object_detection_node
+ros2 run pandaobject_detection pick_and_place
+
+
