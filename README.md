@@ -8,9 +8,8 @@ This project implements a complete pick-and-place simulation using a robotic arm
 A Franka Panda robot is simulated in Gazebo, plans collision-free trajectories using MoveIt 2, and executes a side-grasp pick-and-place pipeline to move a cuboid object from position A to B.
 
 The entire system runs in Docker and is reproducible on any Linux machine.
-
 ### Repo structure
-
+```
 devrob_pick_place/
 ├─ Dockerfile
 ├─ README.md
@@ -32,3 +31,4 @@ devrob_pick_place/
 │  │     └─ table_pick_place.world
 └─ media/
    └─ demo.gif (or demo.mp4)
+```
