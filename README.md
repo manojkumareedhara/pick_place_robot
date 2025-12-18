@@ -6,17 +6,21 @@ This project implements a complete pick-and-place simulation using a robotic arm
 
 
 ### Pick and Place Execution
-![Pick and Place Demo](media/pick_and_place.gif)
 ## Demonstration
+![Pick and Place Demo](media/pick_and_place.gif)
 
-- [Pick and Place Simulation Video](media/Pick%20and%20place.mp4)
+
+<!-- - [Pick and Place Simulation Video](media/Pick%20and%20place.mp4) -->
 
 
 ### Lift arm 
 This Lift arm is used for drawing shapes in the 3d space. This arm is mainly designed to use for Painting the walls and construction. 
-- [Lift Arm Motion Video](media/lift_arm.mp4)
-
+<!-- - [Lift Arm Motion Video](media/lift_arm.mp4) -->
+ 
 ![Lift Arm Demo](media/lift_arm.gif)
+
+
+Docker Hub Link: [text](https://hub.docker.com/r/manojkumareedhara2/ur10e)
 
 ## System Setup
 
